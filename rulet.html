@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <!-- Apps Script 웹앱에서 링크가 iframe 밖(최상위 창)으로 열리도록 -->
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>오늘 점심 뭐 먹지? 날씨 룰렛</title>
+  <!-- 제목·룰렛 글씨용 둥근 한글 글꼴 (불러오지 못해도 기본 글꼴로 정상 동작) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+
+  <style>
+    /* ────────────────────────── 색상·기본값 ────────────────────────── */
+    :root {
+      --bg: #FFF7EA;
+      --card: #FFFFFF;
+      --ink: #3B2F2F;          /* 기본 글자색 (따뜻한 진갈색) */
+      --muted: #8A7A72;
+      --coral: #FF6B6B;        /* 주 강조색 */
+      --orange: #FF9F43;
+      --yellow: #FFD166;
+      --mint: #2EC4A6;
+      --sky: #4DA8F0;
+      --line: #F1E4D3;
+      --shadow: 0 10px 30px rgba(170, 110, 60, .12);
+      --radius: 22px;
+      --title-font: 'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 10%, #FFE3C2 0, transparent 28%),
+        radial-gradient(circle at 92% 18%, #DDF5EE 0, transparent 26%),
+        radial-gradient(circle at 80% 95%, #FFE0E6 0, transparent 30%),
+        var(--bg);
+      min-height: 100vh;
+      padding: 20px 16px 40px;
+    }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    :focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+
+    /* ────────────────────────── 머리말 ────────────────────────── */
+    .top { text-align: center; margin: 4px auto 18px; }
+    .top h1 {
+      font-family: var(--title-font); font-weight: 400;
+      font-size: clamp(1.9rem, 5vw, 2.8rem); margin: 0; letter-spacing: -.5px;
+    }
+    .top h1 .accent { color: var(--coral); }
+    .top p { margin: 6px 0 0; color: var(--muted); }
+    .preview-banner {
+      max-width: 1100px; margin: 0 auto 14px; padding: 10px 14px; border-radius: 14px;
+      background: #FFF1C9; border: 1px dashed #E8B640; font-size: .9rem; text-align: center;
+    }
+
+    /* ────────────────────────── 전체 배치 ────────────────────────── */
+    .layout {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; gap: 20px;
+      grid-template-columns: minmax(300px, 390px) 1fr;  /* PC: 왼쪽 입력, 오른쪽 룰렛 */
+      align-items: start;
+    }
+    .left { display: flex; flex-direction: column; gap: 20px; }
+    .card {
+      background: var(--card); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 20px;
+    }
+    .card h2 { font-family: var(--title-font); font-weight: 400; font-size: 1.35rem; margin: 0 0 12px; }
+    .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .count-badge {
+      font-size: .9rem; background: #FFF1DD; color: #B5651D;
+      padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    }
+
+    /* 입력줄 (입력창 + 버튼) */
+    .row { display: flex; gap: 8px; }
+    .row input {
+      flex: 1; min-width: 0; padding: 12px 14px; border-radius: 14px;
+      border: 2px solid var(--line); background: #FFFCF7; outline: none; transition: border-color .15s;
+    }
+    .row input:focus { border-color: var(--orange); }
+    .row input:disabled { background: #F4F0EA; color: #B9AFA8; }
+    .btn {
+      border: none; border-radius: 14px; padding: 12px 16px; font-weight: 700;
+      background: var(--orange); color: #fff; transition: transform .1s, filter .15s, background .15s;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+    .btn:active:not(:disabled) { transform: translateY(1px); }
+    .btn:disabled { background: #D9D2CB; color: #fff; }
+    .btn.ghost { background: #FFF1DD; color: #B5651D; }
+    .btn.ghost:disabled { background: #F2EEEA; color: #C6BDB5; }
+    .btn.sky { background: var(--sky); }
+
+    /* 안내 문구 */
+    .msg { min-height: 1.4em; margin: 8px 2px 0; font-size: .92rem; color: var(--muted); }
+    .msg.warn { color: #D9480F; font-weight: 700; }
+    .msg.info { color: #2B8A3E; }
+
+    /* ────────────────────────── 날씨 카드 ────────────────────────── */
+    .weather-box { margin-top: 14px; font-size: .95rem; }
+    .w-head { display: flex; align-items: center; gap: 12px; }
+    .w-icon { font-size: 2.6rem; line-height: 1; }
+    .w-place { font-weight: 800; }
+    .w-sub { display: block; color: var(--muted); font-size: .82rem; margin-top: 2px; }
+    .w-line { margin: 8px 0 0; }
+    .w-comment {
+      margin: 12px 0 0; padding: 10px 12px; border-radius: 14px;
+      background: #EFFAF6; color: #1E7D69; font-weight: 700;
+    }
+    .w-error { margin: 0; padding: 10px 12px; border-radius: 14px; background: #FFF0EE; color: #C0392B; }
+    .w-loading { color: var(--muted); }
+    .chips-title { margin: 14px 0 6px; font-size: .85rem; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      border: 2px solid #CDEFE6; background: #fff; color: #1E7D69;
+      border-radius: 999px; padding: 5px 11px; font-size: .88rem; font-weight: 700;
+    }
+    .chip:hover:not(:disabled) { background: #EFFAF6; }
+    .chip:disabled { border-color: #EEE8E2; color: #C6BDB5; }
+    .cands { margin: 12px 0 0; font-size: .85rem; color: var(--muted); }
+    /* AI 추천 영역 */
+    .ai-box {
+      margin-top: 16px; padding: 14px; border-radius: 18px;
+      background: linear-gradient(135deg, #F3EDFF, #EAF4FF); border: 1px solid #E2D8FF;
+    }
+    .ai-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .ai-title { font-weight: 800; color: #5B3FBF; }
+    .btn.ai { background: #7B5CFA; padding: 9px 14px; font-size: .9rem; }
+    .ai-status { margin: 10px 0 0; font-size: .9rem; color: #6B5B9A; }
+    .ai-status.error { color: #C0392B; }
+    .ai-comment { margin: 10px 0 0; font-weight: 700; color: #4B3A8F; }
+    .ai-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .ai-item {
+      display: flex; align-items: center; gap: 10px; background: #fff;
+      border-radius: 14px; padding: 9px 10px 9px 12px; animation: popIn .25s ease;
+    }
+    .ai-item .txt { flex: 1; min-width: 0; }
+    .ai-item b { display: block; }
+    .ai-item small { color: var(--muted); }
+    .ai-add {
+      border: none; border-radius: 10px; padding: 7px 11px; font-weight: 700; font-size: .85rem;
+      background: #EDE7FF; color: #5B3FBF; white-space: nowrap;
+    }
+    .ai-add:hover:not(:disabled) { background: #E0D6FF; }
+    .ai-add:disabled { background: #F2EEEA; color: #B9AFA8; }
+    .dots::after { content: ''; animation: dots 1.2s steps(4) infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+    .cand-btn {
+      border: none; background: none; padding: 0 2px; color: var(--sky);
+      text-decoration: underline; font-size: .85rem;
+    }
+
+    /* ────────────────────────── 메뉴 목록 ────────────────────────── */
+    .menu-list { list-style: none; padding: 0; margin: 10px 0 14px; display: flex; flex-direction: column; gap: 8px; }
+    .menu-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 8px 8px 12px; border-radius: 14px; background: #FFFAF3; border: 1px solid var(--line);
+      animation: popIn .25s ease;
+    }
+    .menu-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 2px rgba(0,0,0,.06); }
+    .menu-name { flex: 1; font-weight: 700; word-break: break-all; }
+    .del-btn {
+      border: none; border-radius: 10px; padding: 6px 10px; font-size: .85rem;
+      background: #FFE3E3; color: #C92A2A; font-weight: 700;
+    }
+    .del-btn:hover:not(:disabled) { background: #FFD0D0; }
+    .del-btn:disabled { background: #F2EEEA; color: #C6BDB5; }
+    .empty { color: var(--muted); text-align: center; padding: 14px 0; font-size: .92rem; }
+
+    /* ────────────────────────── 룰렛 영역 ────────────────────────── */
+    .right { display: flex; flex-direction: column; align-items: center; padding: 26px 20px 22px; }
+    .wheel-area { position: relative; display: flex; align-items: center; justify-content: center; gap: 24px; width: 100%; }
+    .wheel-wrap { position: relative; width: min(100%, 470px); aspect-ratio: 1 / 1; }
+    #wheel { width: 100%; height: 100%; display: block; filter: drop-shadow(0 12px 22px rgba(170,110,60,.22)); }
+    /* 위쪽 가운데에 고정된 화살표 (룰렛과 함께 돌지 않음) */
+    .pointer {
+      position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+      font-size: 54px; line-height: 1; color: var(--coral); z-index: 2; pointer-events: none;
+      text-shadow: 0 3px 0 #fff, 0 -2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 6px 10px rgba(0,0,0,.18);
+    }
+    .pointer.bump { animation: bump .45s ease; }
+
+    /* 카운트다운 숫자 (룰렛 옆) */
+    .countdown {
+      width: 104px; height: 104px; flex: none; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--title-font); font-size: 4.2rem; color: #fff;
+      background: linear-gradient(135deg, var(--coral), var(--orange));
+      box-shadow: 0 10px 22px rgba(255,107,107,.35);
+      visibility: hidden;
+    }
+    .countdown.show { visibility: visible; }
+    .countdown.tick { animation: tick .5s ease; }
+
+    .start-btn {
+      margin-top: 22px; border: none; border-radius: 999px; padding: 16px 44px;
+      font-family: var(--title-font); font-size: 1.6rem; color: #fff;
+      background: linear-gradient(135deg, var(--coral), var(--orange));
+      box-shadow: 0 10px 0 #E0533F, 0 16px 26px rgba(224,83,63,.3);
+      transition: transform .1s, box-shadow .1s;
+    }
+    .start-btn:hover:not(:disabled) { transform: translateY(-2px); }
+    .start-btn:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 4px 0 #E0533F, 0 8px 14px rgba(224,83,63,.3); }
+    .start-btn:disabled { background: #D9D2CB; box-shadow: 0 10px 0 #BDB4AB; }
+    .right .msg { text-align: center; margin-top: 18px; }
+
+    /* ────────────────────────── 최근 결과 ────────────────────────── */
+    .history { max-width: 1100px; margin: 20px auto 0; }
+    .history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+    .history-list li {
+      background: #FFF4E3; border-radius: 999px; padding: 8px 16px; font-weight: 700;
+    }
+    .history-list li:first-child { background: var(--yellow); }
+    .history-list .time { color: #B5651D; font-variant-numeric: tabular-nums; }
+
+    /* ────────────────────────── 결과 팝업 ────────────────────────── */
+    .modal {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+      background: rgba(59, 47, 47, .45);
+    }
+    .modal[hidden] { display: none; }
+    .modal-box {
+      width: min(100%, 460px); background: #fff; border-radius: 28px; text-align: center;
+      padding: 34px 26px 26px; box-shadow: 0 24px 60px rgba(0,0,0,.25);
+      animation: modalIn .45s cubic-bezier(.2, 1.4, .4, 1);
+    }
+    .modal-sub { margin: 0; color: var(--muted); }
+    .modal-title { font-family: var(--title-font); font-weight: 400; font-size: 1.6rem; margin: 10px 0 0; }
+    .result-name {
+      display: block; margin: 6px 0 4px; font-family: var(--title-font);
+      font-size: clamp(2.4rem, 9vw, 3.6rem); color: var(--coral); word-break: keep-all; line-height: 1.15;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; margin-top: 22px; }
+    .modal-actions .btn { padding: 13px 22px; font-size: 1.05rem; }
+
+    /* 꽃가루 캔버스: 화면 전체를 덮지만 클릭은 통과 */
+    #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1001; }
+
+    /* ────────────────────────── 애니메이션 ────────────────────────── */
+    @keyframes popIn { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes modalIn { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes tick { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+    @keyframes bump { 0%,100% { transform: translateX(-50%); } 40% { transform: translateX(-50%) translateY(-8px); } }
+
+    /* ────────────────────────── 휴대폰: 위아래 배치 ────────────────────────── */
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .right { padding: 30px 14px 22px; }
+      /* 좁은 화면에서는 카운트다운을 룰렛 오른쪽 위 모서리에 겹쳐서 표시 */
+      .countdown {
+        position: absolute; top: -6px; right: -2px; z-index: 3;
+        width: 78px; height: 78px; font-size: 3rem;
+      }
+      .start-btn { font-size: 1.4rem; padding: 14px 36px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .menu-item, .modal-box, .countdown.tick, .pointer.bump { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="top">
+    <h1>🍱 오늘 점심 <span class="accent">뭐 먹지?</span></h1>
+    <p>날씨까지 챙겨 주는 점심 메뉴 룰렛</p>
+  </header>
+
+  <!-- Apps Script 밖(파일을 그냥 열었을 때)에서만 보이는 안내 -->
+  <div id="previewBanner" class="preview-banner" hidden>
+    🔧 미리보기 모드예요. Apps Script 웹앱으로 배포하면 진짜 기상청 날씨가 표시돼요. (지금은 예시 날씨)
+  </div>
+
+  <main class="layout">
+    <!-- ══════════ 왼쪽(휴대폰에서는 위): 지역 날씨 + 메뉴 입력 ══════════ -->
+    <section class="left">
+
+      <div class="card">
+        <h2>📍 우리 동네 날씨</h2>
+        <form id="regionForm" class="row" autocomplete="off">
+          <input id="regionInput" type="text" value="안동" maxlength="30"
+                 placeholder="예: 안동, 강남구, 역삼동" aria-label="지역 이름">
+          <button id="regionBtn" class="btn sky" type="submit">날씨 보기</button>
+        </form>
+        <div id="weatherBox" class="weather-box" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>🍽️ 메뉴 목록</h2>
+          <span id="menuCount" class="count-badge">현재 0 / 10개</span>
+        </div>
+        <form id="menuForm" class="row" autocomplete="off">
+          <input id="menuInput" type="text" maxlength="15" placeholder="메뉴 이름을 입력하세요" aria-label="메뉴 이름">
+          <button id="addBtn" class="btn" type="submit">추가</button>
+        </form>
+        <p id="menuMsg" class="msg" aria-live="polite"></p>
+        <ul id="menuList" class="menu-list"></ul>
+        <button id="clearBtn" class="btn ghost" type="button" style="width:100%">전체 삭제</button>
+      </div>
+
+    </section>
+
+    <!-- ══════════ 오른쪽(휴대폰에서는 아래): 룰렛 ══════════ -->
+    <section class="card right">
+      <div class="wheel-area">
+        <div class="wheel-wrap">
+          <div id="pointer" class="pointer" aria-hidden="true">▼</div>
+          <canvas id="wheel" role="img" aria-label="점심 메뉴 룰렛"></canvas>
+        </div>
+        <div id="countdown" class="countdown" aria-live="assertive"></div>
+      </div>
+      <button id="startBtn" class="start-btn" type="button">🎯 룰렛 시작</button>
+      <p id="startMsg" class="msg" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <!-- ══════════ 아래: 최근 결과 5개 ══════════ -->
+  <section class="card history">
+    <h2>🕒 최근 결과</h2>
+    <ol id="historyList" class="history-list"></ol>
+  </section>
+
+  <!-- ══════════ 결과 팝업 ══════════ -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <p class="modal-sub">두구두구두구… 🥁</p>
+      <h2 id="modalTitle" class="modal-title">
+        오늘 점심은
+        <span id="resultName" class="result-name"></span>
+      </h2>
+      <div class="modal-actions">
+        <button id="againBtn" class="btn" type="button">🔄 다시 돌리기</button>
+        <button id="closeBtn" class="btn ghost" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 꽃가루 효과용 캔버스 -->
+  <canvas id="confetti" aria-hidden="true"></canvas>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+ *  날씨 반영 점심 메뉴 룰렛 — 화면 쪽 코드
+ *  - 날씨는 google.script.run 으로 서버(Code.gs)의 getLunchWeather()를 불러 결과만 받는다.
+ *  - 브라우저 저장소(localStorage)는 쓰지 않는다. (새로고침하면 처음 상태로)
+ * ════════════════════════════════════════════════════════════════════ */
+
+// ────────────────────────── 설정값 ──────────────────────────
+const MAX_MENUS = 10;              // 최대 메뉴 개수
+const MIN_MENUS = 2;               // 룰렛을 돌리기 위한 최소 개수
+const SPIN_MS = 5000;              // 룰렛이 도는 시간: 정확히 5초
+const EXTRA_TURNS = 8;             // 멈추기 전까지 최소 몇 바퀴 돌지
+const DEFAULT_MENUS = ['김치찌개', '돈가스', '비빔밥', '짜장면', '냉면'];
+// 칸 색상 10개 (최대 10칸이므로 모든 칸 색이 다름)
+const COLORS = ['#FF8FA3', '#FFC75F', '#8BE0C9', '#7CC6FE', '#C3A6FF',
+                '#FF9F6E', '#B8E986', '#F7A8D8', '#FFE066', '#82D8E8'];
+
+// ────────────────────────── 상태 ──────────────────────────
+let menus = DEFAULT_MENUS.slice();  // 현재 메뉴 목록 (처음엔 예시 5개)
+let history = [];                   // 최근 결과 [{time:'12:03', name:'김치찌개'}]
+let spinning = false;               // 룰렛이 도는 중인지
+let rotation = 0;                   // 룰렛 현재 회전 각도(라디안)
+let recommendMenus = [];            // 날씨 추천 메뉴 (서버의 고정 목록)
+// AI 추천 상태
+let aiRegion = '';                  // 날씨를 성공적으로 불러온 지역 이름 (AI에게 같은 지역으로 물어봄)
+let aiResult = null;                // 마지막 AI 응답 {comment, menus:[{name, reason}]}
+let aiSeen = [];                    // 지금까지 AI가 추천한 메뉴 (다시 물어볼 때 겹치지 않게)
+let aiLoading = false;
+let aiError = '';
+let msgTimer = null;
+
+// Apps Script 안에서 실행 중인지 (google.script.run 이 있는지)
+const HAS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+
+// ────────────────────────── 화면 요소 ──────────────────────────
+const $ = (id) => document.getElementById(id);
+const el = {
+  regionForm: $('regionForm'), regionInput: $('regionInput'), regionBtn: $('regionBtn'), weatherBox: $('weatherBox'),
+  menuForm: $('menuForm'), menuInput: $('menuInput'), addBtn: $('addBtn'), menuMsg: $('menuMsg'),
+  menuList: $('menuList'), menuCount: $('menuCount'), clearBtn: $('clearBtn'),
+  wheel: $('wheel'), pointer: $('pointer'), countdown: $('countdown'), startBtn: $('startBtn'), startMsg: $('startMsg'),
+  historyList: $('historyList'), modal: $('modal'), resultName: $('resultName'),
+  againBtn: $('againBtn'), closeBtn: $('closeBtn'), confetti: $('confetti'), previewBanner: $('previewBanner')
+};
+
+/* ════════════════════════════════════════════════════════════════════
+ *  1. 메뉴 입력
+ * ════════════════════════════════════════════════════════════════════ */
+
+const MAX_MSG = '메뉴는 최대 10개까지 입력할 수 있어요';
+
+/** 메뉴 입력창 아래 안내 문구. persist=false 면 2.5초 뒤 사라짐 */
+function setMenuMsg(text, type = 'warn', persist = false) {
+  clearTimeout(msgTimer);
+  el.menuMsg.textContent = text;
+  el.menuMsg.className = 'msg ' + (text ? type : '');
+  if (text && !persist) {
+    msgTimer = setTimeout(() => {
+      // 잠깐 보여 준 안내를 지우되, 10개가 꽉 찬 상태면 최대 개수 안내는 계속 보여 줌
+      if (menus.length >= MAX_MENUS) setMenuMsg(MAX_MSG, 'warn', true);
+      else setMenuMsg('');
+    }, 2500);
+  }
+}
+
+/** 메뉴 추가. 성공하면 true */
+function addMenu(rawName) {
+  if (spinning) return false;
+  const name = String(rawName || '').trim().replace(/\s+/g, ' '); // 앞뒤 공백 제거, 연속 공백은 하나로
+  if (!name) {                                       // 빈칸·공백만 → 추가하지 않음
+    setMenuMsg('메뉴 이름을 입력해 주세요');
+    return false;
+  }
+  if (menus.length >= MAX_MENUS) {
+    setMenuMsg(MAX_MSG, 'warn', true);
+    return false;
+  }
+  // 같은 이름(띄어쓰기·대소문자 무시) 이 있으면 추가하지 않음
+  const key = (s) => s.replace(/\s/g, '').toLowerCase();
+  if (menus.some((m) => key(m) === key(name))) {
+    setMenuMsg('이미 있는 메뉴예요');
+    return false;
+  }
+  menus.push(name);
+  setMenuMsg('');
+  refreshUI();
+  return true;
+}
+
+/** 메뉴 삭제 */
+function removeMenu(index) {
+  if (spinning) return;
+  menus.splice(index, 1);
+  setMenuMsg('');
+  refreshUI();
+}
+
+/** 전체 삭제 */
+function clearMenus() {
+  if (spinning || !menus.length) return;
+  menus = [];
+  setMenuMsg('메뉴를 모두 지웠어요. 새 메뉴를 추가해 보세요!', 'info');
+  refreshUI();
+  el.menuInput.focus();
+}
+
+/** 메뉴 목록 다시 그리기 */
+function renderMenuList() {
+  el.menuList.replaceChildren();
+  if (!menus.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = '아직 메뉴가 없어요. 위에서 추가해 주세요!';
+    el.menuList.append(li);
+    return;
+  }
+  menus.forEach((name, i) => {
+    const li = document.createElement('li');
+    li.className = 'menu-item';
+
+    const dot = document.createElement('span');   // 룰렛 칸 색과 같은 점
+    dot.className = 'menu-dot';
+    dot.style.background = COLORS[i % COLORS.length];
+
+    const label = document.createElement('span');
+    label.className = 'menu-name';
+    label.textContent = name;                       // textContent → 사용자가 입력한 글자를 안전하게 표시
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'del-btn';
+    del.textContent = '삭제';
+    del.setAttribute('aria-label', name + ' 삭제');
+    del.disabled = spinning;
+    del.addEventListener('click', () => removeMenu(i));
+
+    li.append(dot, label, del);
+    el.menuList.append(li);
+  });
+}
+
+/**
+ * 상태에 맞춰 화면 전체(버튼 활성/비활성, 개수, 목록, 룰렛)를 갱신
+ * — 메뉴가 바뀌면 항상 이 함수를 불러서 룰렛도 바로 다시 그린다.
+ */
+function refreshUI() {
+  const full = menus.length >= MAX_MENUS;
+  el.menuCount.textContent = `현재 ${menus.length} / ${MAX_MENUS}개`;
+
+  // 10개가 되면 입력창과 [추가] 버튼 비활성화 + 안내 유지
+  el.menuInput.disabled = full || spinning;
+  el.addBtn.disabled = full || spinning;
+  if (full && el.menuMsg.textContent !== MAX_MSG) {
+    setMenuMsg(MAX_MSG, 'warn', true);              // 꽉 차면 안내를 계속 보여 줌
+  } else if (!full && el.menuMsg.textContent === MAX_MSG) {
+    setMenuMsg('');                                  // 하나라도 지우면 안내 숨김
+  }
+
+  el.clearBtn.disabled = spinning || !menus.length;
+  el.startBtn.disabled = spinning;
+  if (menus.length >= MIN_MENUS && !spinning) el.startMsg.textContent = '';
+
+  renderMenuList();
+  renderChips();
+  renderAi();
+  drawWheel();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  2. 룰렛 그리기 (canvas)
+ *     각도 기준: 칸 i 는 (rotation - 90° + i×칸크기) 에서 시작 → rotation=0 일 때 0번 칸이 12시 방향부터 시계방향
+ * ════════════════════════════════════════════════════════════════════ */
+const ctx = el.wheel.getContext('2d');
+let wheelSize = 0; // CSS 픽셀 기준 한 변 길이
+
+/** 화면 크기에 맞게 캔버스 해상도 조정 (레티나 화면에서도 선명하게) */
+function resizeWheel() {
+  const rect = el.wheel.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  wheelSize = rect.width;
+  el.wheel.width = Math.round(rect.width * dpr);
+  el.wheel.height = Math.round(rect.width * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawWheel();
+}
+
+/** 칸 안에 들어가도록 글자 크기를 줄이고, 그래도 길면 말줄임(…) */
+function fitText(text, maxWidth, startSize, minSize) {
+  let size = startSize;
+  const font = (s) => `${s}px Jua, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif`;
+  ctx.font = font(size);
+  while (ctx.measureText(text).width > maxWidth && size > minSize) {
+    size -= 1;
+    ctx.font = font(size);
+  }
+  let t = text;
+  while (ctx.measureText(t).width > maxWidth && t.length > 1) t = t.slice(0, -1);
+  if (t !== text) t = t.slice(0, -1) + '…';
+  return t;
+}
+
+function drawWheel() {
+  if (!wheelSize) return;
+  const s = wheelSize, c = s / 2;
+  const r = c - 10;                      // 바깥 테두리 여유
+  const n = menus.length;
+  ctx.clearRect(0, 0, s, s);
+
+  // 바깥 테두리 링
+  ctx.beginPath();
+  ctx.arc(c, c, r + 6, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#FFE1C2';
+  ctx.stroke();
+
+  if (n === 0) {                          // 메뉴가 없을 때
+    ctx.beginPath();
+    ctx.arc(c, c, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#F4EEE8';
+    ctx.fill();
+    ctx.fillStyle = '#A99A90';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${Math.max(14, s * 0.045)}px Jua, sans-serif`;
+    ctx.fillText('메뉴를 추가해 주세요', c, c);
+    return;
+  }
+
+  const seg = (Math.PI * 2) / n;          // 칸 하나의 각도 (모두 같은 크기)
+  for (let i = 0; i < n; i++) {
+    const start = rotation - Math.PI / 2 + i * seg;
+    // 칸 채우기
+    ctx.beginPath();
+    ctx.moveTo(c, c);
+    ctx.arc(c, c, r, start, start + seg);
+    ctx.closePath();
+    ctx.fillStyle = COLORS[i % COLORS.length];
+    ctx.fill();
+    // 칸 사이 흰 경계선
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.stroke();
+
+    // 메뉴 이름: 칸 가운데 방향으로 회전해서 바깥쪽에 정렬
+    // 왼쪽 절반에 있는 칸은 글자가 뒤집혀 보이지 않도록 180° 돌려서 그림
+    const mid = start + seg / 2;
+    const leftSide = Math.cos(mid) < 0;
+    ctx.save();
+    ctx.translate(c, c);
+    ctx.rotate(leftSide ? mid + Math.PI : mid);
+    ctx.textAlign = leftSide ? 'left' : 'right';
+    ctx.textBaseline = 'middle';
+    const outer = r * 0.88, inner = r * 0.26;
+    // 칸이 좁을수록(메뉴가 많을수록) 글자 높이 제한
+    const chord = 2 * (r * 0.62) * Math.sin(Math.min(seg, Math.PI) / 2);
+    const startSize = Math.max(12, Math.min(r * 0.12, chord * 0.55, 30));
+    const label = fitText(menus[i], outer - inner, startSize, 11);
+    ctx.fillStyle = '#3B2F2F';
+    ctx.fillText(label, leftSide ? -outer : outer, 1);
+    ctx.restore();
+  }
+
+  // 가장자리 장식 점
+  for (let i = 0; i < n * 2; i++) {
+    const a = rotation - Math.PI / 2 + (i * seg) / 2;
+    ctx.beginPath();
+    ctx.arc(c + Math.cos(a) * (r + 1), c + Math.sin(a) * (r + 1), 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = i % 2 ? '#FFD166' : '#FF9F43';
+    ctx.fill();
+  }
+
+  // 가운데 원
+  ctx.beginPath();
+  ctx.arc(c, c, r * 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(0,0,0,.15)';
+  ctx.shadowBlur = 10;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#FFE1C2';
+  ctx.stroke();
+  ctx.fillStyle = '#FF6B6B';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${Math.max(14, r * 0.12)}px Jua, sans-serif`;
+  ctx.fillText('점심', c, c + 1);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  3. 룰렛 돌리기
+ * ════════════════════════════════════════════════════════════════════ */
+
+/** 감속 easing: 처음엔 빠르고 끝으로 갈수록 부드럽게 느려짐 (easeOutQuart) */
+const easeOutQuart = (t) => 1 - Math.pow(1 - t, 4);
+
+/** 음수도 0~m 사이로 바꿔 주는 나머지 연산 */
+const mod = (a, m) => ((a % m) + m) % m;
+
+/** 현재 rotation 에서 화살표(12시 방향)가 가리키는 칸 번호 */
+function pointedIndex() {
+  const seg = (Math.PI * 2) / menus.length;
+  return Math.floor(mod(-rotation, Math.PI * 2) / seg);
+}
+
+function startSpin() {
+  if (spinning) return;
+  if (menus.length < MIN_MENUS) {
+    el.startMsg.textContent = '메뉴를 2개 이상 입력해 주세요';
+    el.startMsg.className = 'msg warn';
+    return;
+  }
+  el.startMsg.textContent = '';
+
+  const n = menus.length;
+  const seg = (Math.PI * 2) / n;
+
+  // ① 버튼을 누르는 순간 당첨 메뉴를 먼저 무작위로 정한다
+  const winner = Math.floor(Math.random() * n);
+
+  // ② 화살표가 당첨 칸 '안쪽'을 가리키도록 멈출 각도 계산
+  //    칸의 경계(0%·100%)에 걸리지 않게 칸 폭의 15%~85% 사이 아무 지점으로
+  const inside = 0.15 + Math.random() * 0.7;
+  //    화살표가 칸 i 의 위치 p(라디안)를 가리키려면 rotation ≡ -p (mod 360°)
+  const targetMod = mod(-(winner + inside) * seg, Math.PI * 2);
+  const delta = mod(targetMod - mod(rotation, Math.PI * 2), Math.PI * 2);
+  const from = rotation;
+  const total = EXTRA_TURNS * Math.PI * 2 + delta;   // 여러 바퀴 + 남은 각도
+
+  spinning = true;
+  refreshUI();                                       // 버튼들 잠그기
+
+  // ③ 정확히 5초 동안 easing 으로 회전 (시간 기준이라 프레임이 끊겨도 5초에 멈춤)
+  const t0 = performance.now();
+  let lastCount = 0;
+  el.countdown.classList.add('show');
+
+  function frame(now) {
+    const elapsed = now - t0;
+    const t = Math.min(elapsed / SPIN_MS, 1);
+    rotation = from + total * easeOutQuart(t);
+    drawWheel();
+
+    // 5, 4, 3, 2, 1 카운트다운
+    const count = Math.max(1, Math.ceil((SPIN_MS - elapsed) / 1000));
+    if (count !== lastCount) {
+      lastCount = count;
+      el.countdown.textContent = count;
+      el.countdown.classList.remove('tick');
+      void el.countdown.offsetWidth;               // 애니메이션 다시 시작용
+      el.countdown.classList.add('tick');
+    }
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      rotation = mod(from + total, Math.PI * 2);   // 최종 각도로 정확히 고정
+      drawWheel();
+      finishSpin(winner);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function finishSpin(winner) {
+  const name = menus[winner];
+  // 안전 확인: 실제로 화살표가 가리키는 칸 = 미리 정한 당첨 칸
+  console.assert(pointedIndex() === winner, '화살표 위치와 당첨 메뉴가 다릅니다');
+
+  spinning = false;
+  el.countdown.classList.remove('show', 'tick');
+  el.countdown.textContent = '';
+  el.pointer.classList.remove('bump');
+  void el.pointer.offsetWidth;
+  el.pointer.classList.add('bump');
+
+  addHistory(name);
+  refreshUI();
+  openModal(name);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  4. 결과 팝업 + 최근 기록
+ * ════════════════════════════════════════════════════════════════════ */
+function openModal(name) {
+  el.resultName.textContent = name + '!';
+  el.modal.hidden = false;
+  el.againBtn.focus();
+  launchConfetti();
+}
+
+function closeModal() {
+  el.modal.hidden = true;
+  el.startBtn.focus();
+}
+
+function addHistory(name) {
+  const d = new Date();
+  const pad = (v) => String(v).padStart(2, '0');
+  history.unshift({ time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, name });
+  history = history.slice(0, 5);                   // 최근 5개만
+  renderHistory();
+}
+
+function renderHistory() {
+  el.historyList.replaceChildren();
+  if (!history.length) {
+    const li = document.createElement('li');
+    li.style.background = 'transparent';
+    li.style.fontWeight = '400';
+    li.style.color = 'var(--muted)';
+    li.textContent = '아직 결과가 없어요. 룰렛을 돌려 보세요!';
+    el.historyList.append(li);
+    return;
+  }
+  history.forEach((h) => {
+    const li = document.createElement('li');
+    const time = document.createElement('span');
+    time.className = 'time';
+    time.textContent = h.time;
+    li.append(time, document.createTextNode(' - ' + h.name));
+    el.historyList.append(li);
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  5. 꽃가루 효과 (외부 라이브러리 없이 canvas 로 직접 구현)
+ * ════════════════════════════════════════════════════════════════════ */
+const cctx = el.confetti.getContext('2d');
+let confettiPieces = [];
+let confettiRunning = false;
+const CONFETTI_COLORS = ['#FF6B6B', '#FFD166', '#06D6A0', '#4DA8F0', '#C3A6FF', '#FF9F43', '#F7A8D8'];
+
+function resizeConfetti() {
+  const dpr = window.devicePixelRatio || 1;
+  el.confetti.width = innerWidth * dpr;
+  el.confetti.height = innerHeight * dpr;
+  cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+/** 꽃가루 조각 하나 만들기 */
+function makePiece(x, y, burst) {
+  const angle = burst ? (-Math.PI / 2 + (Math.random() - 0.5) * 1.9) : Math.PI / 2;
+  const speed = burst ? 9 + Math.random() * 10 : 1 + Math.random() * 3;
+  return {
+    x, y,
+    vx: Math.cos(angle) * speed + (burst ? 0 : (Math.random() - 0.5) * 2),
+    vy: Math.sin(angle) * speed,
+    w: 7 + Math.random() * 7,
+    h: 4 + Math.random() * 6,
+    color: CONFETTI_COLORS[(Math.random() * CONFETTI_COLORS.length) | 0],
+    shape: Math.random() < 0.25 ? 'circle' : 'rect',
+    rot: Math.random() * Math.PI * 2,
+    vr: (Math.random() - 0.5) * 0.3,
+    wobble: Math.random() * Math.PI * 2       // 팔랑팔랑 흔들림
+  };
+}
+
+function launchConfetti() {
+  resizeConfetti();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const W = innerWidth, H = innerHeight;
+  const count = reduce ? 40 : 140;
+  // 화면 아래쪽 양옆에서 위로 '팡' 터지는 조각
+  for (let i = 0; i < count; i++) {
+    const fromLeft = i % 2 === 0;
+    const p = makePiece(fromLeft ? W * 0.15 : W * 0.85, H * 0.75, true);
+    p.vx += fromLeft ? 3 : -3;
+    confettiPieces.push(p);
+  }
+  // 위에서 비처럼 내리는 조각
+  for (let i = 0; i < count * 0.6; i++) {
+    confettiPieces.push(makePiece(Math.random() * W, -20 - Math.random() * H * 0.5, false));
+  }
+  if (!confettiRunning) {
+    confettiRunning = true;
+    let last = performance.now();
+    requestAnimationFrame(function loop(now) {
+      const dt = Math.min((now - last) / 16.67, 3); // 60fps 기준 배율 (느린 기기에서도 같은 속도)
+      last = now;
+      cctx.clearRect(0, 0, W, H);
+      confettiPieces.forEach((p) => {
+        p.vy += 0.28 * dt;                          // 중력
+        p.vx *= Math.pow(0.985, dt);                // 공기 저항
+        p.vy = Math.min(p.vy, 6);                   // 떨어지는 최고 속도
+        p.wobble += 0.12 * dt;
+        p.x += (p.vx + Math.sin(p.wobble) * 0.8) * dt;
+        p.y += p.vy * dt;
+        p.rot += p.vr * dt;
+
+        cctx.save();
+        cctx.translate(p.x, p.y);
+        cctx.rotate(p.rot);
+        cctx.scale(1, Math.cos(p.wobble));          // 뒤집히는 느낌
+        cctx.fillStyle = p.color;
+        if (p.shape === 'circle') {
+          cctx.beginPath();
+          cctx.arc(0, 0, p.h / 2 + 1, 0, Math.PI * 2);
+          cctx.fill();
+        } else {
+          cctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        }
+        cctx.restore();
+      });
+      // 화면 아래로 떨어진 조각은 지움
+      confettiPieces = confettiPieces.filter((p) => p.y < H + 40);
+      if (confettiPieces.length) {
+        requestAnimationFrame(loop);
+      } else {
+        confettiRunning = false;
+        cctx.clearRect(0, 0, W, H);
+      }
+    });
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  6. 날씨 (서버 Code.gs 의 getLunchWeather 호출)
+ * ════════════════════════════════════════════════════════════════════ */
+
+/** 작은 요소 만들기 도우미 */
+function h(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function loadWeather(regionText) {
+  const q = String(regionText || '').trim();
+  if (!q) {
+    el.weatherBox.replaceChildren(h('p', 'w-error', '지역 이름을 입력해 주세요.'));
+    return;
+  }
+  el.regionBtn.disabled = true;
+  el.weatherBox.replaceChildren(h('p', 'w-loading', '⏳ 날씨를 불러오는 중이에요…'));
+
+  const done = (res) => { el.regionBtn.disabled = false; renderWeather(res); };
+  if (HAS_GAS) {
+    google.script.run
+      .withSuccessHandler(done)
+      .withFailureHandler((err) => done({ ok: false, message: '서버 호출에 실패했어요: ' + (err && err.message || err) }))
+      .getLunchWeather(q);
+  } else {
+    setTimeout(() => done(mockWeather(q)), 500);   // 미리보기용 가짜 날씨
+  }
+}
+
+/** 서버 결과를 날씨 카드에 표시 */
+function renderWeather(res) {
+  const box = el.weatherBox;
+  box.replaceChildren();
+  recommendMenus = [];
+  // 지역이 바뀌면 AI 추천도 새로 시작
+  aiRegion = ''; aiResult = null; aiSeen = []; aiError = '';
+
+  // 지역 정보 (지역은 찾았지만 날씨 호출이 실패한 경우에도 표시)
+  if (res.region) {
+    const head = h('div', 'w-head');
+    head.append(h('span', 'w-icon', res.weather ? res.weather.mood.icon : '📍'));
+    const info = h('div');
+    info.append(h('span', 'w-place', res.region.name),
+                h('span', 'w-sub', `기상청 격자 ${res.region.nx}, ${res.region.ny}`));
+    head.append(info);
+    box.append(head);
+  }
+
+  if (!res.ok || !res.weather) {
+    const err = h('p', 'w-error', '⚠️ ' + (res.message || '날씨를 불러오지 못했어요.'));
+    if (res.region) err.style.marginTop = '10px';
+    box.append(err);
+  } else {
+    const w = res.weather;
+    const L = w.lunch, N = w.now;
+    // 점심 예보 한 줄
+    const parts = [];
+    if (w.skyText) parts.push(w.skyText);
+    if (L.pty && L.pty !== '0') parts.push(w.ptyText);
+    if (L.temp !== null) parts.push(`${L.temp}℃`);
+    if (L.pop !== null) parts.push(`강수확률 ${L.pop}%`);
+    if (parts.length) {
+      box.append(h('p', 'w-line', `🍚 ${w.isToday ? '오늘' : '내일'} 점심(12시) 예보: ${parts.join(' · ')}`));
+    }
+    // 현재 실황 한 줄
+    const nowParts = [];
+    if (N.temp !== null) nowParts.push(`${N.temp}℃`);
+    if (N.humidity !== null) nowParts.push(`습도 ${N.humidity}%`);
+    nowParts.push(N.pty && N.pty !== '0' ? (({ 1: '비', 2: '비/눈', 3: '눈', 5: '빗방울', 6: '빗방울눈날림', 7: '눈날림' })[N.pty] || '강수') : '강수 없음');
+    box.append(h('p', 'w-line', `🌡️ 지금: ${nowParts.join(' · ')}`));
+    box.append(h('p', 'w-comment', `${w.mood.icon} ${w.mood.comment}`));
+
+    // 날씨 추천 메뉴 (눌러서 메뉴에 추가)
+    recommendMenus = w.recommend || [];
+    box.append(h('p', 'chips-title', '날씨 추천 메뉴 · 눌러서 룰렛에 추가'));
+    box.append(h('div', 'chips'));
+
+    // 🤖 AI 추천 메뉴 영역 (버튼을 눌러야 OpenAI를 호출 → 비용 절약)
+    aiRegion = res.region.name;
+    box.append(h('div', 'ai-box'));
+  }
+
+  // 같은 이름 지역이 여러 곳일 때 다른 후보 보여 주기
+  if (res.candidates && res.candidates.length) {
+    const p = h('p', 'cands', '혹시 이곳인가요? ');
+    res.candidates.slice(0, 4).forEach((name, i) => {
+      const b = h('button', 'cand-btn', name);
+      b.type = 'button';
+      b.addEventListener('click', () => { el.regionInput.value = name; loadWeather(name); });
+      p.append(b);
+      if (i < Math.min(res.candidates.length, 4) - 1) p.append(document.createTextNode(' · '));
+    });
+    box.append(p);
+  }
+  renderChips();
+  renderAi();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  6-1. AI 추천 메뉴 (서버 Code.gs 의 getAiRecommendation → OpenAI)
+ * ════════════════════════════════════════════════════════════════════ */
+
+/** AI에게 추천 요청 */
+function askAi() {
+  if (aiLoading || !aiRegion) return;
+  aiLoading = true;
+  aiError = '';
+  renderAi();
+
+  // 이미 룰렛에 있는 메뉴 + 앞서 AI가 추천한 메뉴는 빼 달라고 부탁
+  const exclude = menus.concat(aiSeen);
+  const done = (res) => {
+    aiLoading = false;
+    if (res && res.ok && res.menus && res.menus.length) {
+      aiResult = res;
+      res.menus.forEach((m) => { if (!aiSeen.includes(m.name)) aiSeen.push(m.name); });
+    } else {
+      aiError = (res && res.message) || 'AI 추천을 받지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+    }
+    renderAi();
+  };
+  if (HAS_GAS) {
+    google.script.run
+      .withSuccessHandler(done)
+      .withFailureHandler((err) => done({ ok: false, message: '서버 호출에 실패했어요: ' + (err && err.message || err) }))
+      .getAiRecommendation(aiRegion, exclude);
+  } else {
+    setTimeout(() => done(mockAi(exclude)), 900);   // 미리보기용 가짜 AI 응답
+  }
+}
+
+/** AI 추천 영역 그리기 */
+function renderAi() {
+  const box = el.weatherBox.querySelector('.ai-box');
+  if (!box) return;
+  box.replaceChildren();
+
+  const head = h('div', 'ai-head');
+  head.append(h('span', 'ai-title', '🤖 AI 추천 메뉴'));
+  const askBtn = h('button', 'btn ai', aiResult ? '🔄 다른 추천' : '✨ AI에게 추천받기');
+  askBtn.type = 'button';
+  askBtn.disabled = aiLoading;
+  askBtn.addEventListener('click', askAi);
+  head.append(askBtn);
+  box.append(head);
+
+  if (aiLoading) {
+    const p = h('p', 'ai-status', 'AI가 날씨를 보고 메뉴를 고민하는 중이에요');
+    p.classList.add('dots');
+    box.append(p);
+    return;
+  }
+  if (aiError) box.append(h('p', 'ai-status error', '⚠️ ' + aiError));
+  if (!aiResult) {
+    if (!aiError) box.append(h('p', 'ai-status', '오늘 날씨에 딱 맞는 메뉴 3가지를 AI가 골라 드려요.'));
+    return;
+  }
+
+  if (aiResult.comment) box.append(h('p', 'ai-comment', '💬 ' + aiResult.comment));
+  const list = h('ul', 'ai-list');
+  aiResult.menus.forEach((m) => {
+    const li = h('li', 'ai-item');
+    const txt = h('div', 'txt');
+    txt.append(h('b', '', m.name), h('small', '', m.reason));
+    const exists = menus.includes(m.name);
+    const add = h('button', 'ai-add', exists ? '✓ 추가됨' : '+ 추가');
+    add.type = 'button';
+    add.disabled = exists || spinning || menus.length >= MAX_MENUS;
+    add.setAttribute('aria-label', m.name + ' 룰렛에 추가');
+    add.addEventListener('click', () => addMenu(m.name));
+    li.append(txt, add);
+    list.append(li);
+  });
+  box.append(list);
+}
+
+/** Apps Script 밖에서 열었을 때 쓰는 예시 AI 응답 */
+function mockAi(exclude) {
+  const pool = [
+    { name: '얼큰칼국수', reason: '구름 낀 쌀쌀한 날엔 칼칼한 국물이 딱이에요.' },
+    { name: '제육덮밥', reason: '흐린 날 기분을 끌어올려 줄 매콤달콤함!' },
+    { name: '샤브샤브', reason: '선선한 바람엔 따끈한 육수로 몸을 데워요.' },
+    { name: '순두부찌개', reason: '보글보글 뚝배기로 오후까지 든든하게.' },
+    { name: '차돌짬뽕', reason: '구름 많은 날, 불맛 국물로 기분 전환해요.' },
+    { name: '돼지국밥', reason: '쌀쌀한 공기엔 뽀얀 국물 한 그릇이 최고예요.' }
+  ];
+  const left = pool.filter((m) => !exclude.includes(m.name));
+  return { ok: true, comment: '구름 많고 선선한 날, 따뜻한 메뉴가 생각나요! (미리보기 예시)', menus: left.slice(0, 3) };
+}
+
+/** 추천 메뉴 버튼 (이미 있거나, 10개 꽉 찼거나, 도는 중이면 비활성) */
+function renderChips() {
+  const wrap = el.weatherBox.querySelector('.chips');
+  if (!wrap) return;
+  wrap.replaceChildren();
+  recommendMenus.forEach((name) => {
+    const exists = menus.includes(name);
+    const b = h('button', 'chip', exists ? '✓ ' + name : '+ ' + name);
+    b.type = 'button';
+    b.disabled = exists || spinning || menus.length >= MAX_MENUS;
+    b.addEventListener('click', () => addMenu(name));
+    wrap.append(b);
+  });
+}
+
+/** Apps Script 밖에서 열었을 때 쓰는 예시 날씨 */
+function mockWeather(q) {
+  return {
+    ok: true,
+    region: { name: `${q} (미리보기)`, nx: 91, ny: 106 },
+    candidates: [],
+    weather: {
+      now: { temp: 14.2, pty: '0', humidity: 45 },
+      lunch: { temp: 16, sky: '3', pty: '0', pop: 20 },
+      ptyText: '없음', skyText: '구름많음', isToday: true,
+      mood: { icon: '☁️', label: '흐림', comment: '흐린 날엔 기분 전환되는 진한 맛이 당겨요.' },
+      recommend: ['짜장면', '카레', '제육볶음', '마라탕', '떡볶이', '돈가스']
+    }
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  7. 이벤트 연결 & 시작
+ * ════════════════════════════════════════════════════════════════════ */
+
+// [추가] 버튼 클릭과 Enter 모두 form submit 으로 처리
+el.menuForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (addMenu(el.menuInput.value)) el.menuInput.value = '';
+  if (!el.menuInput.disabled) el.menuInput.focus();
+});
+el.clearBtn.addEventListener('click', clearMenus);
+el.startBtn.addEventListener('click', startSpin);
+
+el.regionForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  loadWeather(el.regionInput.value);
+});
+
+// 팝업 버튼
+el.closeBtn.addEventListener('click', closeModal);
+el.againBtn.addEventListener('click', () => { el.modal.hidden = true; startSpin(); });
+el.modal.addEventListener('click', (e) => { if (e.target === el.modal) closeModal(); }); // 바깥 클릭
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el.modal.hidden) closeModal(); });
+
+// 화면 크기가 바뀌면 룰렛 다시 그리기
+new ResizeObserver(resizeWheel).observe(el.wheel);
+window.addEventListener('resize', () => { if (confettiRunning) resizeConfetti(); });
+// 글꼴(Jua)이 늦게 도착하면 룰렛 글씨를 다시 그림
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawWheel);
+
+// 처음 화면
+if (!HAS_GAS) el.previewBanner.hidden = false;
+resizeWheel();
+refreshUI();
+renderHistory();
+loadWeather(el.regionInput.value);   // 기본 지역(안동) 날씨 바로 불러오기
+</script>
+</body>
+</html>

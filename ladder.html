@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>두근두근 사다리타기</title>
+<style>
+  :root{
+    --ink:#2d2a4a; --muted:#7c7a99; --primary:#ff6b6b; --primary-d:#f04848;
+    --sun:#ffd43b; --mint:#38d9a9; --sky:#4dabf7; --violet:#9775fa;
+    --card:rgba(255,255,255,.82);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+    color:var(--ink);
+    background:linear-gradient(135deg,#fff4e0 0%,#ffe9f0 45%,#e3f4ff 100%);
+    background-size:200% 200%;
+    animation:bgShift 18s ease-in-out infinite;
+    overflow-x:hidden;
+    padding:28px 16px 60px;
+  }
+  @keyframes bgShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+
+  /* 떠다니는 배경 방울 */
+  .blob{position:fixed;border-radius:50%;filter:blur(36px);opacity:.5;z-index:0;pointer-events:none;animation:float 16s ease-in-out infinite}
+  .blob.b1{width:260px;height:260px;background:#ffd43b;top:-60px;left:-60px}
+  .blob.b2{width:320px;height:320px;background:#ff8fab;bottom:-100px;right:-80px;animation-delay:-5s}
+  .blob.b3{width:200px;height:200px;background:#63e6be;top:40%;left:70%;animation-delay:-9s}
+  .blob.b4{width:180px;height:180px;background:#74c0fc;top:60%;left:-40px;animation-delay:-3s}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.08)}66%{transform:translate(-30px,25px) scale(.95)}}
+
+  .wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto}
+
+  /* 헤더 */
+  header{text-align:center;margin-bottom:22px;animation:fadeDown .8s cubic-bezier(.2,.8,.2,1) both}
+  .logo{font-size:48px;display:inline-block;animation:wiggle 2.6s ease-in-out infinite}
+  @keyframes wiggle{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg) translateY(-4px)}}
+  h1{font-size:clamp(28px,5vw,42px);font-weight:900;letter-spacing:-1px;
+     background:linear-gradient(90deg,#ff6b6b,#ffa94d,#f06595,#9775fa,#ff6b6b);background-size:300% 100%;
+     -webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+  @keyframes shine{to{background-position:300% 0}}
+  header p{color:var(--muted);margin-top:6px;font-size:15px}
+
+  .card{background:var(--card);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+        border-radius:24px;box-shadow:0 12px 40px rgba(120,80,160,.13),0 2px 0 rgba(255,255,255,.8) inset;
+        padding:20px;margin-bottom:18px;animation:fadeUp .8s cubic-bezier(.2,.8,.2,1) both}
+  .card:nth-of-type(2){animation-delay:.12s}
+  .card:nth-of-type(3){animation-delay:.24s}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+  @keyframes fadeDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:none}}
+
+  /* 컨트롤 */
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+  .count-box{display:flex;align-items:center;gap:12px;font-weight:700}
+  .stepper{display:flex;align-items:center;background:#fff;border-radius:999px;padding:4px;box-shadow:0 3px 10px rgba(0,0,0,.06)}
+  .stepper button{width:38px;height:38px;border:none;border-radius:50%;font-size:20px;font-weight:800;cursor:pointer;
+                  background:#fff0f0;color:var(--primary);transition:transform .2s, background .2s}
+  .stepper button:hover:not(:disabled){background:var(--primary);color:#fff;transform:scale(1.1)}
+  .stepper button:active:not(:disabled){transform:scale(.9)}
+  .stepper input{width:54px;border:none;text-align:center;font-size:20px;font-weight:800;color:var(--ink);background:transparent;outline:none;-moz-appearance:textfield}
+  .stepper input::-webkit-inner-spin-button{-webkit-appearance:none}
+  .hint{font-size:13px;color:var(--muted);font-weight:500}
+  .btns{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{border:none;cursor:pointer;font-family:inherit;font-weight:800;font-size:17px;border-radius:999px;padding:13px 26px;
+       transition:transform .25s cubic-bezier(.3,1.6,.5,1), box-shadow .25s, opacity .3s, background .3s}
+  .btn:hover:not(:disabled){transform:translateY(-3px) scale(1.04)}
+  .btn:active:not(:disabled){transform:scale(.95)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-start{background:linear-gradient(135deg,#ff6b6b,#ff922b);color:#fff;box-shadow:0 8px 22px rgba(255,107,107,.45);position:relative;overflow:hidden}
+  .btn-start:not(:disabled)::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;
+       background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);transform:skewX(-20deg);animation:gleam 2.8s ease-in-out infinite}
+  @keyframes gleam{0%,60%{left:-60%}100%{left:130%}}
+  .btn-start:not(:disabled){animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 8px 22px rgba(255,107,107,.45)}50%{box-shadow:0 8px 34px rgba(255,107,107,.75)}}
+  .btn-reset{background:#fff;color:var(--violet);box-shadow:0 4px 14px rgba(151,117,250,.25)}
+
+  /* 보드 */
+  .board-scroll{overflow-x:auto;padding-bottom:6px}
+  .board{position:relative;margin:0 auto}
+  .row{display:grid;grid-template-columns:repeat(var(--n),1fr)}
+  .cell{padding:0 5px;display:flex;flex-direction:column;align-items:center;animation:popIn .5s cubic-bezier(.3,1.6,.5,1) both}
+  @keyframes popIn{from{opacity:0;transform:scale(.4) translateY(10px)}to{opacity:1;transform:none}}
+  .cell.leaving{animation:popOut .3s ease forwards}
+  @keyframes popOut{to{opacity:0;transform:scale(.4)}}
+  .avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:900;font-size:15px;margin-bottom:6px;
+          box-shadow:0 4px 10px rgba(0,0,0,.15);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+  .cell:hover .avatar{transform:translateY(-4px) rotate(-8deg)}
+  .avatar.active{animation:bounce .6s ease-in-out infinite alternate}
+  @keyframes bounce{to{transform:translateY(-6px) scale(1.1)}}
+  .field{width:100%;min-width:0;border:2px solid transparent;background:#fff;border-radius:14px;padding:9px 6px;text-align:center;
+         font-family:inherit;font-size:14px;font-weight:700;color:var(--ink);outline:none;box-shadow:0 3px 10px rgba(0,0,0,.06);
+         transition:border-color .25s, transform .25s, box-shadow .25s}
+  .field:focus{border-color:var(--c,#ff6b6b);transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.1)}
+  .field:disabled{background:#fafaff;color:var(--ink);cursor:default}
+  .prize-cell .field{background:#fffbea}
+  .prize-cell .tag{height:24px;margin-top:6px;font-size:12px;font-weight:800;color:#fff;border-radius:999px;padding:3px 10px;
+                   opacity:0;transform:scale(.3) translateY(-8px);transition:all .5s cubic-bezier(.3,1.6,.5,1);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .prize-cell.hit .tag{opacity:1;transform:none}
+  .prize-cell.hit .field{border-color:var(--c);animation:jelly .6s ease}
+  @keyframes jelly{0%{transform:scale(1)}30%{transform:scale(1.15,.9)}60%{transform:scale(.95,1.05)}100%{transform:scale(1)}}
+  .label{font-size:12px;color:var(--muted);font-weight:700;margin:4px 0 8px 4px}
+
+  .ladder-wrap{position:relative;height:380px;margin:10px 0;border-radius:20px;overflow:hidden}
+  #ladder{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .rail{stroke:#d9d3f0;stroke-width:6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:draw .9s cubic-bezier(.6,0,.3,1) forwards}
+  .rung{stroke:#c3b8ee;stroke-width:6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:draw .45s ease-out forwards}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  .trail{fill:none;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 3px rgba(0,0,0,.15))}
+  .runner{filter:drop-shadow(0 3px 4px rgba(0,0,0,.25))}
+
+  /* 가림막 */
+  .curtain{position:absolute;inset:0;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+           background:repeating-linear-gradient(45deg,#ffe066 0 28px,#ffd43b 28px 56px);
+           box-shadow:inset 0 0 0 4px rgba(255,255,255,.6);
+           transition:transform .9s cubic-bezier(.7,-0.3,.3,1.2), opacity .9s ease;z-index:3;overflow:hidden}
+  .curtain.open{transform:translateY(-110%);opacity:0;pointer-events:none}
+  .curtain .gift{font-size:64px;animation:shake 1.8s ease-in-out infinite}
+  @keyframes shake{0%,100%{transform:rotate(0)}10%{transform:rotate(-12deg) scale(1.05)}20%{transform:rotate(12deg) scale(1.05)}30%{transform:rotate(-8deg)}40%{transform:rotate(0)}}
+  .curtain h2{font-size:22px;font-weight:900;color:#7a4f00}
+  .curtain p{font-size:15px;color:#a06a00;font-weight:700}
+  .qm{position:absolute;font-size:30px;font-weight:900;color:rgba(255,255,255,.75);animation:qfloat 5s ease-in-out infinite}
+  @keyframes qfloat{0%,100%{transform:translateY(0) rotate(-10deg);opacity:.5}50%{transform:translateY(-22px) rotate(10deg);opacity:1}}
+
+  /* 결과 */
+  .result-card h3{font-size:20px;font-weight:900;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .result-card{display:none}
+  .result-card.show{display:block}
+  .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+  .res{display:flex;align-items:center;gap:10px;background:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 4px 14px rgba(0,0,0,.06);
+       border-left:6px solid var(--c);animation:popIn .55s cubic-bezier(.3,1.6,.5,1) both;transition:transform .25s}
+  .res:hover{transform:translateY(-3px) rotate(-1deg)}
+  .res .nm{font-weight:800}
+  .res .arrow{color:var(--muted);font-weight:900}
+  .res .pz{font-weight:800;color:var(--c);margin-left:auto;text-align:right;word-break:keep-all}
+  .res.win{background:linear-gradient(135deg,#fff9db,#fff)}
+  .status{font-size:15px;font-weight:700;color:var(--muted);text-align:center;min-height:22px;margin-top:4px;transition:opacity .3s}
+
+  /* 꽃가루 */
+  .confetti{position:fixed;top:-20px;width:10px;height:14px;z-index:50;pointer-events:none;border-radius:3px;animation:fall linear forwards}
+  @keyframes fall{to{transform:translate(var(--dx),110vh) rotate(var(--r));opacity:.8}}
+
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:10px;animation:fadeUp 1s .4s both}
+  @media (max-width:600px){
+    body{padding:18px 10px 40px}
+    .card{padding:16px;border-radius:20px}
+    .controls{flex-direction:column;align-items:stretch}
+    .count-box{justify-content:space-between}
+    .btns{justify-content:stretch}.btns .btn{flex:1}
+    .ladder-wrap{height:320px}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
+
+<div class="wrap">
+  <header>
+    <div class="logo">🪜</div>
+    <h1>두근두근 사다리타기</h1>
+    <p>인원수를 정하고, 이름과 당첨 내용을 적은 뒤 시작 버튼을 눌러보세요!</p>
+  </header>
+
+  <section class="card">
+    <div class="controls">
+      <div class="count-box">
+        <span>👥 참가 인원</span>
+        <div class="stepper">
+          <button id="minus" aria-label="인원 줄이기">−</button>
+          <input id="count" type="number" min="2" max="12" value="6" aria-label="참가 인원수">
+          <button id="plus" aria-label="인원 늘리기">+</button>
+        </div>
+        <span class="hint">2~12명</span>
+      </div>
+      <div class="btns">
+        <button class="btn btn-reset" id="reset" disabled>🔄 다시 하기</button>
+        <button class="btn btn-start" id="start">🚀 시작!</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="board-scroll">
+      <div class="board" id="board">
+        <div class="label">🙋 참가자 이름</div>
+        <div class="row" id="namesRow"></div>
+        <div class="ladder-wrap" id="ladderWrap">
+          <svg id="ladder" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div class="curtain" id="curtain">
+            <div class="gift">🎁</div>
+            <h2>사다리가 숨겨져 있어요</h2>
+            <p>시작 버튼을 누르면 공개됩니다!</p>
+          </div>
+        </div>
+        <div class="row" id="prizesRow"></div>
+        <div class="label" style="margin-top:8px">🎯 당첨 내용</div>
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card result-card" id="resultCard">
+    <h3>🏆 결과 발표</h3>
+    <div class="results" id="results"></div>
+  </section>
+
+  <footer>사다리는 매번 새로 무작위로 만들어져요 ✨</footer>
+</div>
+
+<script>
+const COLORS=['#ff6b6b','#20c997','#ff922b','#9775fa','#339af0','#f06595','#51cf66','#fab005','#22b8cf','#845ef7','#e8590c','#5c7cfa'];
+const DEFAULT_NAMES=['김민준','이서연','박지호','최수아','정예준','강하은'];
+const DEFAULT_PRIZES=['🎉 당첨!','꽝','☕ 커피 쏘기','꽝','🍪 간식 당번','꽝'];
+const MIN=2, MAX=12, LEVELS=11, DURATION=2600, STAGGER=300;
+
+const state={n:6,names:[...DEFAULT_NAMES],prizes:[...DEFAULT_PRIZES],rungs:null,running:false,results:null};
+const $=id=>document.getElementById(id);
+const svgNS='http://www.w3.org/2000/svg';
+const board=$('board'), namesRow=$('namesRow'), prizesRow=$('prizesRow'), wrap=$('ladderWrap'),
+      svg=$('ladder'), curtain=$('curtain'), countInput=$('count'), startBtn=$('start'), resetBtn=$('reset'),
+      statusEl=$('status'), resultCard=$('resultCard'), resultsEl=$('results');
+
+/* ---------- 입력 영역 ---------- */
+function fillArrays(){
+  while(state.names.length<state.n) state.names.push('참가자 '+(state.names.length+1));
+  while(state.prizes.length<state.n) state.prizes.push('꽝');
+}
+function renderInputs(prevN){
+  fillArrays();
+  board.style.setProperty('--n',state.n);
+  board.style.minWidth=(state.n*84)+'px';
+  namesRow.innerHTML=''; prizesRow.innerHTML='';
+  for(let i=0;i<state.n;i++){
+    const c=COLORS[i%COLORS.length];
+    const isNew=prevN!==undefined && i>=prevN;
+    const delay=(prevN===undefined? i*0.06 : (isNew?0:0))+'s';
+
+    const nc=document.createElement('div');
+    nc.className='cell'; nc.style.animationDelay=delay;
+    if(prevN!==undefined && !isNew) nc.style.animation='none';
+    nc.innerHTML=`<div class="avatar" style="background:${c}">${i+1}</div>`;
+    const ni=document.createElement('input');
+    ni.className='field'; ni.maxLength=10; ni.value=state.names[i]; ni.placeholder='이름';
+    ni.style.setProperty('--c',c); ni.setAttribute('aria-label',(i+1)+'번 참가자 이름');
+    ni.addEventListener('input',()=>state.names[i]=ni.value);
+    nc.appendChild(ni); namesRow.appendChild(nc);
+
+    const pc=document.createElement('div');
+    pc.className='cell prize-cell'; pc.style.animationDelay=delay;
+    if(prevN!==undefined && !isNew) pc.style.animation='none';
+    const pi=document.createElement('input');
+    pi.className='field'; pi.maxLength=14; pi.value=state.prizes[i]; pi.placeholder='당첨 내용';
+    pi.style.setProperty('--c','#fab005'); pi.setAttribute('aria-label',(i+1)+'번 당첨 내용');
+    pi.addEventListener('input',()=>state.prizes[i]=pi.value);
+    const tag=document.createElement('div'); tag.className='tag';
+    pc.appendChild(pi); pc.appendChild(tag); prizesRow.appendChild(pc);
+  }
+}
+function setCount(v){
+  v=Math.max(MIN,Math.min(MAX,parseInt(v)||MIN));
+  if(state.running) return;
+  if(state.results) resetGame();
+  const prev=state.n;
+  countInput.value=v;
+  if(v===prev){return}
+  if(v<prev){
+    // 사라지는 칸 애니메이션 후 다시 그리기
+    [...namesRow.children].slice(v).forEach(el=>el.classList.add('leaving'));
+    [...prizesRow.children].slice(v).forEach(el=>el.classList.add('leaving'));
+    state.n=v;
+    setTimeout(()=>{ if(state.n===v){renderInputs(v); drawLadder(true);} },280);
+  }else{
+    state.n=v; renderInputs(prev); drawLadder(true);
+  }
+  $('minus').disabled=v<=MIN; $('plus').disabled=v>=MAX;
+}
+
+/* ---------- 사다리 ---------- */
+function geom(){
+  const W=wrap.clientWidth, H=wrap.clientHeight, top=14, bottom=H-14;
+  const x=i=>(i+0.5)*W/state.n;
+  const ly=l=>top+(l+1)*(bottom-top)/(LEVELS+1);
+  return {W,H,top,bottom,x,ly};
+}
+function generateRungs(){
+  const n=state.n, r=[];
+  for(let l=0;l<LEVELS;l++){
+    const row=new Array(Math.max(n-1,0)).fill(false);
+    for(let g=0;g<n-1;g++){ if(g>0&&row[g-1]) continue; if(Math.random()<0.42) row[g]=true; }
+    r.push(row);
+  }
+  // 모든 칸 사이에 가로줄이 최소 1개는 있도록
+  for(let g=0;g<n-1;g++){
+    if(r.some(row=>row[g])) continue;
+    const cand=[]; for(let l=0;l<LEVELS;l++){ if(!(r[l][g-1])&&!(r[l][g+1])) cand.push(l); }
+    const l=cand.length?cand[Math.floor(Math.random()*cand.length)]:Math.floor(Math.random()*LEVELS);
+    r[l][g]=true; if(g>0) r[l][g-1]=false; if(g<n-2) r[l][g+1]=false;
+  }
+  return r;
+}
+function el(tag,attrs){const e=document.createElementNS(svgNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function drawLadder(animate){
+  const G=geom(); svg.innerHTML='';
+  svg.setAttribute('viewBox',`0 0 ${G.W} ${G.H}`);
+  for(let i=0;i<state.n;i++){
+    const ln=el('line',{x1:G.x(i),y1:G.top,x2:G.x(i),y2:G.bottom,class:'rail',pathLength:100});
+    ln.style.animationDelay=animate?(i*0.05)+'s':'0s';
+    if(!animate) ln.style.animationDuration='0s';
+    svg.appendChild(ln);
+  }
+  if(state.rungs){
+    let k=0;
+    state.rungs.forEach((row,l)=>row.forEach((on,g)=>{
+      if(!on) return;
+      const ln=el('line',{x1:G.x(g),y1:G.ly(l),x2:G.x(g+1),y2:G.ly(l),class:'rung',pathLength:100});
+      ln.style.animationDelay=animate?(0.35+k*0.03)+'s':'0s';
+      if(!animate) ln.style.animationDuration='0s';
+      svg.appendChild(ln); k++;
+    }));
+  }
+}
+function trace(start){
+  const G=geom(); let c=start; const pts=[[G.x(c),G.top]];
+  for(let l=0;l<LEVELS;l++){
+    const y=G.ly(l), row=state.rungs[l];
+    if(c>0&&row[c-1]){pts.push([G.x(c),y],[G.x(c-1),y]);c--;}
+    else if(c<state.n-1&&row[c]){pts.push([G.x(c),y],[G.x(c+1),y]);c++;}
+  }
+  pts.push([G.x(c),G.bottom]);
+  return {pts,end:c};
+}
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+
+function drawTrails(animate,done){
+  const trailLayer=el('g',{}), dotLayer=el('g',{});
+  svg.appendChild(trailLayer); svg.appendChild(dotLayer);
+  let finished=0;
+  const results=[];
+  for(let i=0;i<state.n;i++){
+    const {pts,end}=trace(i); results[i]=end;
+    const c=COLORS[i%COLORS.length];
+    const p=el('path',{d:'M'+pts.map(p=>p.join(',')).join(' L'),class:'trail',stroke:c,opacity:.88});
+    trailLayer.appendChild(p);
+    const len=p.getTotalLength();
+    const dot=el('circle',{r:9,fill:c,stroke:'#fff','stroke-width':3,class:'runner'});
+    dotLayer.appendChild(dot);
+    if(!animate){
+      const e=pts[pts.length-1]; dot.setAttribute('cx',e[0]); dot.setAttribute('cy',e[1]);
+      continue;
+    }
+    p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
+    const s=pts[0]; dot.setAttribute('cx',s[0]); dot.setAttribute('cy',s[1]); dot.style.opacity=0;
+    const avatar=namesRow.children[i].querySelector('.avatar');
+    setTimeout(()=>{
+      dot.style.transition='opacity .3s'; dot.style.opacity=1; avatar.classList.add('active');
+      const t0=performance.now();
+      (function step(now){
+        const t=Math.min(1,(now-t0)/DURATION), d=ease(t)*len;
+        p.style.strokeDashoffset=len-d;
+        const pt=p.getPointAtLength(d); dot.setAttribute('cx',pt.x); dot.setAttribute('cy',pt.y);
+        if(t<1) requestAnimationFrame(step);
+        else{
+          avatar.classList.remove('active');
+          markHit(i,end);
+          if(++finished===state.n) done&&done(results);
+        }
+      })(t0);
+    },700+i*STAGGER);
+  }
+  if(!animate){ results.forEach((e,i)=>markHit(i,e)); done&&done(results); }
+}
+function markHit(i,end){
+  const cell=prizesRow.children[end]; if(!cell) return;
+  const c=COLORS[i%COLORS.length];
+  cell.classList.remove('hit'); void cell.offsetWidth;
+  cell.style.setProperty('--c',c); cell.classList.add('hit');
+  const tag=cell.querySelector('.tag'); tag.textContent=state.names[i]; tag.style.background=c;
+}
+
+/* ---------- 진행 ---------- */
+function lockInputs(lock){
+  document.querySelectorAll('.field').forEach(f=>f.disabled=lock);
+  countInput.disabled=lock; $('minus').disabled=lock||state.n<=MIN; $('plus').disabled=lock||state.n>=MAX;
+}
+function start(){
+  if(state.running||state.results) return;
+  // 빈 칸 채우기
+  for(let i=0;i<state.n;i++){
+    if(!state.names[i]||!state.names[i].trim()) state.names[i]='참가자 '+(i+1);
+    if(!state.prizes[i]||!state.prizes[i].trim()) state.prizes[i]='꽝';
+  }
+  [...namesRow.querySelectorAll('.field')].forEach((f,i)=>f.value=state.names[i]);
+  [...prizesRow.querySelectorAll('.field')].forEach((f,i)=>f.value=state.prizes[i]);
+
+  state.running=true; lockInputs(true);
+  startBtn.disabled=true; resetBtn.disabled=true;
+  statusEl.textContent='사다리를 타는 중… 두근두근 💓';
+  state.rungs=generateRungs();
+  drawLadder(false);
+  // 가로줄을 펼쳐 그리기
+  [...svg.querySelectorAll('.rung')].forEach((r,k)=>{r.style.animationDuration='';r.style.animationDelay=(0.25+k*0.025)+'s';});
+  curtain.classList.add('open');
+  drawTrails(true,res=>{
+    state.results=res; state.running=false;
+    resetBtn.disabled=false;
+    statusEl.textContent='결과가 나왔어요! 🎊';
+    showResults();
+    confetti();
+  });
+}
+function showResults(){
+  resultsEl.innerHTML='';
+  state.results.forEach((end,i)=>{
+    const c=COLORS[i%COLORS.length], prize=state.prizes[end];
+    const win=/당첨|🎉/.test(prize);
+    const d=document.createElement('div');
+    d.className='res'+(win?' win':''); d.style.setProperty('--c',c); d.style.animationDelay=(i*0.08)+'s';
+    d.innerHTML=`<span class="nm"></span><span class="arrow">→</span><span class="pz"></span>`;
+    d.querySelector('.nm').textContent=state.names[i];
+    d.querySelector('.pz').textContent=prize;
+    resultsEl.appendChild(d);
+  });
+  resultCard.classList.add('show');
+  resultCard.style.animation='none'; void resultCard.offsetWidth; resultCard.style.animation='';
+  setTimeout(()=>resultCard.scrollIntoView({behavior:'smooth',block:'nearest'}),200);
+}
+function resetGame(){
+  if(state.running) return;
+  state.rungs=null; state.results=null;
+  curtain.classList.remove('open');
+  resultCard.classList.remove('show');
+  prizesRow.querySelectorAll('.prize-cell').forEach(c=>c.classList.remove('hit'));
+  statusEl.textContent='';
+  lockInputs(false);
+  startBtn.disabled=false; resetBtn.disabled=true;
+  setTimeout(()=>drawLadder(true),350);
+}
+function confetti(){
+  const cols=['#ff6b6b','#ffd43b','#38d9a9','#4dabf7','#9775fa','#f06595','#ff922b'];
+  for(let i=0;i<90;i++){
+    const c=document.createElement('div'); c.className='confetti';
+    c.style.left=Math.random()*100+'vw';
+    c.style.background=cols[i%cols.length];
+    c.style.setProperty('--dx',(Math.random()*200-100)+'px');
+    c.style.setProperty('--r',(Math.random()*900-450)+'deg');
+    c.style.animationDuration=(2.2+Math.random()*1.8)+'s';
+    c.style.animationDelay=Math.random()*0.6+'s';
+    if(Math.random()<.4){c.style.borderRadius='50%';c.style.width=c.style.height='9px';}
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),5000);
+  }
+}
+
+/* ---------- 물음표 장식 ---------- */
+(function(){
+  const spots=[[8,15],[85,20],[15,75],[80,78],[50,10],[30,45],[70,50],[45,88]];
+  spots.forEach(([x,y],i)=>{
+    const q=document.createElement('span'); q.className='qm'; q.textContent='?';
+    q.style.left=x+'%'; q.style.top=y+'%'; q.style.animationDelay=(-i*0.7)+'s';
+    curtain.appendChild(q);
+  });
+})();
+
+/* ---------- 이벤트 ---------- */
+$('minus').onclick=()=>setCount(state.n-1);
+$('plus').onclick=()=>setCount(state.n+1);
+countInput.addEventListener('change',()=>setCount(countInput.value));
+countInput.addEventListener('keydown',e=>{if(e.key==='Enter')setCount(countInput.value)});
+startBtn.onclick=start;
+resetBtn.onclick=resetGame;
+let rt;
+window.addEventListener('resize',()=>{
+  clearTimeout(rt);
+  rt=setTimeout(()=>{
+    if(state.running) return;
+    drawLadder(false);
+    if(state.results) drawTrails(false);
+  },150);
+});
+
+renderInputs();
+drawLadder(true);
+</script>
+</body>
+</html>
